@@ -49,23 +49,27 @@ var protocolCommands = {
             'logBufferAddress': { length: 8, name: 'Log buffer address' },
             'relayStatus': { length: 2, name: 'Relay status' },
             'hertz': { length: 2, name: 'Hertz' }
-        }
+        },
+        color: colors.navy
     },
     init: {
         name: "Init",
         request: '000A',
         response: '0011',
-        infoSplit: [4,4,16,2,2,16,4,2,4]
+        infoSplit: [4,4,16,2,2,16,4,2,4],
+        color: colors.magenta
     },
     switch: {
         name: "Switch",
         request: '0017',
-        response: '0018'
+        response: '0018',
+        color: colors.cyan
     },
     ack: {
         name: "Ack",
         response: '0000',
-        infoSplit: [4,4,4]
+        infoSplit: [4,4,4],
+        color: colors.violet
     },
     frames: {
         start: '\x05\x05\x03\x03',
@@ -78,7 +82,8 @@ for(var key in protocolCommands) {
     var protocolCommandInfo = protocolCommands[key];
     commandResponses[protocolCommandInfo.response] = {
         infoSplit: protocolCommandInfo.infoSplit,
-        name: protocolCommandInfo.name
+        name: protocolCommandInfo.name,
+        color: protocolCommandInfo.color
     };
 }
 
@@ -129,6 +134,7 @@ function plugwise(options)
 
     var ackumulation = [];
     var commandCallbackReference = {};
+    var ackCounter = 0;
 
     function readData(data) {
 
@@ -153,34 +159,50 @@ function plugwise(options)
             }
 
             if (options.log) {
-                console.log(colors.green + "READ ", commandInfo.name + ':\t' + splitedData.join('\t') + colors.reset);
+                console.log(commandInfo.color + "READ ", commandInfo.name + ':\t' + splitedData.join('\t') + colors.reset);
             }
+
+            var isAck = false;
 
 
             // here we check for the imidate reponse and the response count
             if (splitedData[0] == protocolCommands.ack.response) {
+
+                isAck = true;
+
+
+                ackCounter += 1;
+                if (ackCounter > 0) ackCounter = 0;
 
                 if (splitedData[2] == '00C1') {
                     ackumulation.push(splitedData[1]);
                     var ref = commandStack[ackumulation.length - 1];
                     ref.ack = splitedData[1];
                     commandCallbackReference[ref.ack] = ref;
+                    //console.log(colors.white , "0",  data, colors.reset);
                 }
 
                 // this happens when the response is a result of a command that doesnt expect 
                 // data in return
                 else {
                     var ack = splitedData[1];
+
                     var responseInfo = commandCallbackReference[ack];
-                    var mac = responseInfo.mac;
-                    //console.log("ack:", responseInfo);
-                    if (responseInfo.callback) {
-                        var parsedData = {};
-                        if (responseInfo.command.parseInfo) {
-                            parsedData = parseResponse(responseInfo.command.parseInfo, data);
+                    if (responseInfo) {
+                        var mac = responseInfo.mac;
+                        //console.log("ack:", responseInfo);
+                        if (responseInfo.callback) {
+                            var parsedData = {};
+                            if (responseInfo.command.parseInfo) {
+                                parsedData = parseResponse(responseInfo.command.parseInfo, data);
+                            }
+                            responseInfo.callback.call(plugwiseObject(mac), parsedData.parsed);
+                            //commandCallbackReference[ack].callback(parsedData.parsed);
                         }
-                        responseInfo.callback.call(plugwiseObject(mac), parsedData.parsed);
-                        //commandCallbackReference[ack].callback(parsedData.parsed);
+                    }
+                    else {
+                    console.log(colors.white ,"1",  data, colors.reset);
+                        //console.log("No callback for ack:", ack,  data);
                     }
                 }
                 //console.log(commandStack);
@@ -197,12 +219,15 @@ function plugwise(options)
                     }
                     responseInfo.callback.call(plugwiseObject(mac), parsedData.parsed);
                 }
+                else {
+                    console.log(colors.white ,"2",  data, colors.reset);
+                }
 
             }
 
         }
         else {
-            //console.log(colors.dkgray , data, colors.reset);
+            console.log(colors.white ,"2",  data, colors.reset);
         }
 
 
@@ -252,6 +277,9 @@ function plugwise(options)
 
         sp.write(completeCommand);
 
+        // we use a counter to know how many ack we are up in compared to commands
+        ackCounter -= 1;
+
         return completeCommand;
     }
 
@@ -265,7 +293,8 @@ function plugwise(options)
     }
 
     function sendQueue() {
-        if (responsesCounter == 1) {
+        //console.log("ackCounter = ", ackCounter);
+        if (responsesCounter == 1 && ackCounter >= 0) {
             var command = commandQueue.shift();
             if (command && command.f) {
                 command.f.call(command.scope);
