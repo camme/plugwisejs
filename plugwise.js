@@ -11,71 +11,8 @@
 var serialport = require('serialport');
 var crc = require('crc');
 var SerialPort = serialport.SerialPort; // localize object constructor
-
-// useful colors for bash
-var colors = {
-    black: "\x1b[0;30m",
-    dkgray: "\x1b[1;30m",
-    brick: "\x1b[0;31m",    
-    red: "\x1b[1;31m",
-    green: "\x1b[0;32m",    
-    lime: "\x1b[1;32m",
-    brown: "\x1b[0;33m",    
-    yellow: "\x1b[1;33m",
-    navy: "\x1b[0;34m", 
-    blue: "\x1b[1;34m",
-    violet: "\x1b[0;35m",   
-    magenta: "\x1b[1;35m",
-    teal: "\x1b[0;36m", 
-    cyan: "\x1b[1;36m",
-    ltgray: "\x1b[0;37m",   
-    white: "\x1b[1;37m",
-    reset: "\x1b[0m"
-};
-
-// list of command codes for the protocol
-var protocolCommands = {
-    info: {
-        name: "Info",
-        request: '0023',
-        response: '0024',
-        infoSplit: [4,4,16,2,2,4,8,2,2],
-        parseInfo: {
-            'responseCode' : { length: 4, name: 'Response code' },
-            'mac': { length: 16, name: 'Mac address' }, 
-            'year': {length: 2, name: 'Year' },
-            'month': { length: 2, name: 'Month' },
-            'minutes': {length: 4, name: 'Minutes' },
-            'logBufferAddress': { length: 8, name: 'Log buffer address' },
-            'relayStatus': { length: 2, name: 'Relay status' },
-            'hertz': { length: 2, name: 'Hertz' }
-        },
-        color: colors.navy
-    },
-    init: {
-        name: "Init",
-        request: '000A',
-        response: '0011',
-        infoSplit: [4,4,16,2,2,16,4,2,4],
-        color: colors.magenta
-    },
-    switch: {
-        name: "Switch",
-        request: '0017',
-        response: '0018',
-        color: colors.cyan
-    },
-    ack: {
-        name: "Ack",
-        response: '0000',
-        infoSplit: [4,4,4],
-        color: colors.violet
-    },
-    frames: {
-        start: '\x05\x05\x03\x03',
-        end: '\r'
-    }
-}
+var colors = require('./colors').colors;
+var protocolCommands = require('./plugwise-commands').protocolCommands;
 
 var commandResponses = {};
 for(var key in protocolCommands) {
@@ -87,14 +24,6 @@ for(var key in protocolCommands) {
     };
 }
 
-// found this code to check for special characters
-function unicodeEscape(str) {
-    return str.replace(/[\s\S]/g, function(character) {
-        var escape = character.charCodeAt().toString(16),
-        longhand = escape.length > 2;
-        return '\\' + (longhand ? 'u' : 'x') + ('0000' + escape).slice(longhand ? -4 : -2);
-    });
-}
 
 function parseResponse(responseCodeParts, data) {
     var infoData = {};      
@@ -107,7 +36,7 @@ function parseResponse(responseCodeParts, data) {
     var parsed = {};
 
     parsed.mac = infoData.mac.value;
-    parsed.relay = infoData.relayStatus.value == "01";      
+    parsed.relay = infoData.relayStatus.value == "01";
     parsed.hertz = infoData.hertz.value == "85" ? 50 : 60;
 
     infoData.parsed = parsed;
@@ -140,6 +69,10 @@ function plugwise(options)
 
         var result = data;
 
+        if (options.log > 2) {
+            console.log("RAW DATA:", data);
+        }
+
         // strip strange character in the begining of the string
         while(data.charCodeAt(0) < 48 || data.charCodeAt(0) > 89) {
             data = data.substring(1);
@@ -158,10 +91,13 @@ function plugwise(options)
                 index += commandInfo.infoSplit[i];
             }
 
-            if (options.log) {
+            if (splitedData[0] === protocolCommands.ack.response && options.log > 1) {
                 console.log(commandInfo.color + "READ ", commandInfo.name + ':\t' + splitedData.join('\t') + colors.reset);
             }
-
+            else if (splitedData[0] !== protocolCommands.ack.response && options.log > 0) {
+                console.log(commandInfo.color + "READ ", commandInfo.name + ':\t' + splitedData.join('\t') + colors.reset);
+            }
+ 
             var isAck = false;
 
 
@@ -169,7 +105,6 @@ function plugwise(options)
             if (splitedData[0] == protocolCommands.ack.response) {
 
                 isAck = true;
-
 
                 ackCounter += 1;
                 if (ackCounter > 0) ackCounter = 0;
@@ -181,28 +116,74 @@ function plugwise(options)
                     commandCallbackReference[ref.ack] = ref;
                     //console.log(colors.white , "0",  data, colors.reset);
                 }
+                else if (splitedData[2] == '00C2') {
+                    var last;
+                    for(var ack in commandCallbackReference) {
+                       last = commandCallbackReference[ack]; 
+                    }
+                    if (last && last.command.request !== '000A') {
+                        var mac = last.mac;
+                        if (last.callback) {
+                            last.callback.call(plugwiseObject(mac), {error: true});
+                        }
+                    }
+                }
+                else if (splitedData[2] =='00E1') {
+
+                    // what is this?
+                    if (options.log > 0) {
+                        console.log(colors.red + "Error?" + colors.reset);
+                    }
+
+                    var ack = splitedData[1];
+                    var responseInfo = commandCallbackReference[ack];
+                    if (responseInfo) {
+                        delete commandCallbackReference[ack];
+                        var mac = responseInfo.mac;
+                        //console.log("ack:", responseInfo);
+                        if (responseInfo.callback) {
+                            var parsedData = {};
+                            var result = {error: true};
+                            var pw = plugwiseObject(mac);
+                            responseInfo.callback.call(pw, result);
+                        }
+                    }
+                    if (responsesCounter == 1) {
+                        sendQueue();
+                    }
+                }
 
                 // this happens when the response is a result of a command that doesnt expect 
                 // data in return
                 else {
                     var ack = splitedData[1];
-
                     var responseInfo = commandCallbackReference[ack];
                     if (responseInfo) {
+                        delete commandCallbackReference[ack];
                         var mac = responseInfo.mac;
                         //console.log("ack:", responseInfo);
                         if (responseInfo.callback) {
                             var parsedData = {};
-                            if (responseInfo.command.parseInfo) {
-                                parsedData = parseResponse(responseInfo.command.parseInfo, data);
+                            var result = null;
+                            var pw = plugwiseObject(mac);
+                            //if (responseInfo.command.parseInfo) {
+                                //parsedData = parseResponse(responseInfo.command.parseInfo, data);
+                                //result = parsedData.parsed;
+                            //}
+                            //console.log("data:", data);
+                            if (responseInfo.command.parseFunction) {
+                                result = responseInfo.command.parseFunction(pw, splitedData);
                             }
-                            responseInfo.callback.call(plugwiseObject(mac), parsedData.parsed);
+                            responseInfo.callback.call(pw, result);
                             //commandCallbackReference[ack].callback(parsedData.parsed);
                         }
                     }
                     else {
-                    console.log(colors.white ,"1",  data, colors.reset);
+                        //console.log(colors.white ,"1",  data, colors.reset);
                         //console.log("No callback for ack:", ack,  data);
+                    }
+                    if (responsesCounter == 1) {
+                        sendQueue();
                     }
                 }
                 //console.log(commandStack);
@@ -214,25 +195,35 @@ function plugwise(options)
                 var responseInfo = commandCallbackReference[ack];
                 if (responseInfo && responseInfo.callback) {
                     var parsedData = {};
-                    if (responseInfo.command.parseInfo) {
-                        parsedData = parseResponse(responseInfo.command.parseInfo, data);
+                    var result = null;
+                    var pw = plugwiseObject(mac);
+                    //if (responseInfo.command.parseInfo) {
+                        //parsedData = parseResponse(responseInfo.command.parseInfo, data);
+                        //result = parsedData.parsed;
+                    //}
+                    if (responseInfo.command.parseFunction) {
+                        result = responseInfo.command.parseFunction(pw, splitedData);
                     }
-                    responseInfo.callback.call(plugwiseObject(mac), parsedData.parsed);
+                        responseInfo.callback.call(pw, result);
                 }
                 else {
-                    console.log(colors.white ,"2",  data, colors.reset);
+                    //console.log(colors.white ,"2",  data, colors.reset);
+                }
+
+                if (responsesCounter == 1) {
+                    sendQueue();
                 }
 
             }
 
         }
         else {
-            console.log(colors.white ,"2",  data, colors.reset);
+            //console.log(colors.white ,"3",  data, colors.reset);
         }
 
 
         if (responsesCounter == 1) {
-            sendQueue();
+            //sendQueue();
         }
         else {
             responsesCounter++;
@@ -266,13 +257,26 @@ function plugwise(options)
             completeCommand += params;
         }
 
-        commandParts.push(crc.crc16(completeCommand).toString(16).toUpperCase());
+        var crcChecksum = crc.crc16(completeCommand).toString(16).toUpperCase();
+
+        if (crcChecksum.length < 2) {
+            crcChecksum = "000" + crcChecksum;
+        }
+        else if (crcChecksum.length < 3) {
+            crcChecksum = "00" + crcChecksum;
+        }
+        else if (crcChecksum.length < 4) {
+            crcChecksum = "0" + crcChecksum;
+        }
+
+        commandParts.push(crcChecksum);
         completeCommand = protocolCommands.frames.start + commandParts.join("") + protocolCommands.frames.end;
 
         commandStack.push({mac: mac,command: command, ack:'', callback: callback, scope: scope});
 
-        if (options.log) {
-            console.log(colors.teal + "SEND " , command.name + ":\t" +  commandParts.join("\t") + colors.reset); 
+        if (options.log > 0) {
+            console.log('---');
+            console.log(command.color + "SEND " , command.name + ":\t" +  commandParts.join("\t") + colors.reset); 
         }
 
         sp.write(completeCommand);
@@ -314,7 +318,12 @@ function plugwise(options)
 
 
         var internal = new (function(mac){ 
+
             var self = this;
+
+            // reserved for internal data
+            self.data = {};
+            self.data.relay = null; // holds the status of the relay
 
             self.mac = mac;
             //console.log("MAC:", mac);
@@ -350,12 +359,47 @@ function plugwise(options)
                 sendQueue();
                 return self;
             }
+
+            self.powerinfo = function(callback) {
+                if (self.data.relay) {
+                (function(mac, callback, pw){
+                    // if we havent asked for calibarion data, lets do it now
+                    if (!pw.data.calibration) {
+                        pw.calibration(function(){})
+                    };
+                    commandQueue.push({f: function() {
+                        sendCommand(protocolCommands.powerinfo, mac, callback, pw); 
+                    }, scope: pw});
+                })(mac, callback, self);
+                sendQueue();}
+                else {
+
+                    callback.call(self, {error: true, message: 'relay off'});
+                }
+                return self;
+            }
+
+            self.calibration = function(callback) {
+                (function(mac, callback, pw){
+                    commandQueue.push({f: function() {
+                        sendCommand(protocolCommands.calibration, mac, callback, pw); 
+                    }, scope: pw});
+                })(mac, callback, self);
+                sendQueue();
+                return self;
+            }
+
             this.init = init;
+
+            //this.calibration(function(){});
+
 
         })(mac);
 
 
         listOfAppliances[mac] = internal;
+        //console.log(mac);
+        //internal.calibration(function(){});
 
         // return to be able to chain
         return internal;
