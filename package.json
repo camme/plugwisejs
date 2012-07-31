@@ -1,6 +1,6 @@
 {
 	"name" : "plugwisejs",
-	"version" : "0.2.0",
+	"version" : "0.4.0",
 	"description" : "Plugwise API for nodejs",
 	"author": "Camilo Tapia <camilo.tapia@gmail.com>",
 	"contributors": [],

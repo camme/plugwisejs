@@ -361,20 +361,32 @@ function plugwise(options)
             }
 
             self.powerinfo = function(callback) {
-                if (self.data.relay) {
-                (function(mac, callback, pw){
-                    // if we havent asked for calibarion data, lets do it now
-                    if (!pw.data.calibration) {
-                        pw.calibration(function(){})
-                    };
-                    commandQueue.push({f: function() {
-                        sendCommand(protocolCommands.powerinfo, mac, callback, pw); 
-                    }, scope: pw});
-                })(mac, callback, self);
-                sendQueue();}
-                else {
 
-                    callback.call(self, {error: true, message: 'relay off'});
+                // if we want to read the power from an appliance, we have to know if its on or off
+                if (self.data.relay) {
+                    (function(mac, callback, pw){
+                        // if we havent asked for calibarion data, lets do it now
+                        if (!pw.data.calibration) {
+                            pw.calibration(function(){})
+                        };
+                        commandQueue.push({f: function() {
+                            sendCommand(protocolCommands.powerinfo, mac, callback, pw); 
+                        }, scope: pw});
+                    })(mac, callback, self);
+                    sendQueue();
+                }
+                else {
+                    // check if we dont know if the relay is on or off
+                    if (self.data.relay !== false) {
+                        //console.log("check relay");
+                        self.info(function(result) {
+                            //console.log("relay info recieved", result);
+                            self.powerinfo(callback);
+                        });
+                    }
+                    else {
+                        callback.call(self, {error: true, message: 'relay off'});
+                    }
                 }
                 return self;
             }
@@ -411,15 +423,21 @@ function plugwise(options)
 }
 
 var hasBeenInitiated = false;
+var listOfDevices = {};
+
 exports.init = function(options, callback) {
-
-    var instance = plugwise(options);
-    instance().init();
-    if (typeof callback == 'function') {
-        callback.call(instance);
+    if (listOfDevices[options.serialport]) {
+        return listOfDevices[options.serialport];
     }
-    return instance;
-
+    else {
+        var instance = plugwise(options);
+        instance().init();
+        if (typeof callback == 'function') {
+            callback.call(instance);
+        }
+        listOfDevices[options.serialport] = instance;
+        return instance;
+    }
 }
 
 

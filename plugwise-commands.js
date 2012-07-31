@@ -86,19 +86,25 @@ exports.protocolCommands = {
             var pulsesEightSeconds = parseInt(data[4], 16);
             var pulsesTotal = parseInt(data[5], 16);
 
-            var pulses =  pulseCorrection(
-                pulsesEightSeconds,
-                8,
-                60*60,
-                pw.data.calibration.gainA,
-                pw.data.calibration.gainB,
-                pw.data.calibration.offTot,
-                pw.data.calibration.offNoise
-            );
-            var watt = pulsesToWatt(pulses);
-            var kwh = pulsesToKwh(pulses);
+            if (pw.data.calibration) {
+                var pulses =  pulseCorrection(
+                    pulsesEightSeconds,
+                    8,
+                    60*60,
+                    pw.data.calibration.gainA,
+                    pw.data.calibration.gainB,
+                    pw.data.calibration.offTot,
+                    pw.data.calibration.offNoise
+                );
+                var watt = pulsesToWatt(pulses);
+                var kwh = pulsesToKwh(pulses);
 
-            return {watt: watt, kWh: kwh, pulses: pulses};
+                return {watt: watt, kWh: kwh, pulses: pulses};
+            }
+            else {
+                return {error: true, message: 'no calibration data'};
+            }
+
 
         }
     },
@@ -120,7 +126,10 @@ exports.protocolCommands = {
         name: "Switch",
         request: '0017',
         response: '0018',
-        color: colors.cyan
+        color: colors.cyan,
+        parseFunction: function(pw, data) {
+            pw.data.relay = data[2] == "00D8";
+        }
     },
     ack: {
         name: "Ack",
