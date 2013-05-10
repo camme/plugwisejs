@@ -45,17 +45,23 @@ function parseResponse(responseCodeParts, data) {
 }
 
 // the actual class 
-function plugwise(options)
-{
+function plugwise(options) {
 
     var commandStack = [];
     var commandQueue = [];
     var responsesCounter = 0;
+    var opened = false;
+    var initiated = false;
 
     // connect to the serial port of the 'stick'
     var sp = new SerialPort(options.serialport, { 
         baudrate: 115200,
         parser: serialport.parsers.readline('\n') 
+    });
+
+    sp.on('open', function() {
+        opened = true;
+        init();
     });
 
     // read incoming data
@@ -293,15 +299,22 @@ function plugwise(options)
 
     // init
     function init(){
-        sendCommand(protocolCommands.init);
+        if (opened && !initiated) {
+            initiated = true;
+            sendCommand(protocolCommands.init);
+        }
     }
 
     function sendQueue() {
         //console.log("ackCounter = ", ackCounter);
-        if (responsesCounter == 1 && ackCounter >= 0) {
+        if (opened && responsesCounter == 1 && ackCounter >= 0) {
             var command = commandQueue.shift();
             if (command && command.f) {
-                command.f.call(command.scope);
+                //(function(command) {
+                    //setTimeout(function() {
+                        command.f.call(command.scope);
+                    //}, 500);
+                //})(command);
             }
         }
     }

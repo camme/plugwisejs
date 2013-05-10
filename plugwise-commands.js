@@ -61,10 +61,15 @@ exports.protocolCommands = {
 
             var calibration = pw.data.calibration = { };
 
-            calibration.gainA = new Buffer(data[3], 'hex').readFloatBE(0);
-            calibration.gainB = new Buffer(data[4], 'hex').readFloatBE(0);
-            calibration.offTot = new Buffer(data[5], 'hex').readFloatBE(0);
-            calibration.offNoise = new Buffer(data[6], 'hex').readFloatBE(0);
+            try {
+                calibration.gainA = new Buffer(data[3], 'hex').readFloatBE(0);
+                calibration.gainB = new Buffer(data[4], 'hex').readFloatBE(0);
+                calibration.offTot = new Buffer(data[5], 'hex').readFloatBE(0);
+                calibration.offNoise = new Buffer(data[6], 'hex').readFloatBE(0);
+            }
+            catch(err) {
+                console.log("ERROR IN PLUGWISE COMMANDS", err);
+            }
 
         }
     },
