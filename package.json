@@ -1,18 +1,21 @@
 {
-	"name" : "plugwisejs",
-	"version" : "0.2.0",
-	"description" : "Plugwise API for nodejs",
-	"author": "Camilo Tapia <camilo.tapia@gmail.com>",
-	"contributors": [],
-	"main": "./plugwise.js",
-	"scripts": {},
-	"directories" : {},
-	"devDependencies": {
-	  "serialport": "*",
-	  "crc": "*"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git://github.com/camme/plugwisejs.git"
-	}
+  "name": "plugwisejs",
+  "version": "0.4.1",
+  "description": "Plugwise API for nodejs",
+  "author": "Camilo Tapia <camilo.tapia@gmail.com>",
+  "contributors": [],
+  "main": "./plugwise.js",
+  "scripts": {},
+  "directories": {},
+  "devDependencies": {
+    "serialport": "*",
+    "crc": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/camme/plugwisejs.git"
+  },
+  "dependencies": {
+    "serialport": "~1.1.0"
+  }
 }
