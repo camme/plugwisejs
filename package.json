@@ -9,7 +9,7 @@
   "directories": {},
   "devDependencies": {
     "serialport": "*",
-    "crc": "*"
+    "crc": "0.2.0"
   },
   "repository": {
     "type": "git",
