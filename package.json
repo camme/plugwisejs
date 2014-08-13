@@ -8,7 +8,7 @@
   "scripts": {},
   "directories": {},
   "devDependencies": {
-    "serialport": "*",
+    "serialport": "~1.1.0",
     "crc": "0.2.0"
   },
   "repository": {
@@ -16,6 +16,7 @@
     "url": "git://github.com/camme/plugwisejs.git"
   },
   "dependencies": {
-    "serialport": "~1.1.0"
+    "serialport": "~1.1.0",
+    "crc": "0.2.0"
   }
 }
