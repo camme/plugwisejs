@@ -8,8 +8,8 @@
   "scripts": {},
   "directories": {},
   "devDependencies": {
-    "serialport": "*",
-    "crc": "*"
+    "serialport": "~1.1.0",
+    "crc": "0.2.0"
   },
   "repository": {
     "type": "git",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "serialport": "~1.1.0",
-    "moment": "^2.8.1"
+    "moment": "^2.8.1",
+    "crc": "0.2.0"
   }
 }
