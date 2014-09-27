@@ -13,6 +13,7 @@ var crc = require('crc');
 var SerialPort = serialport.SerialPort; // localize object constructor
 var colors = require('./colors').colors;
 var protocolCommands = require('./plugwise-commands').protocolCommands;
+var moment = require('moment');
 
 var commandResponses = {};
 for(var key in protocolCommands) {
@@ -363,6 +364,36 @@ function plugwise(options) {
                 return self;
             }
 
+            self.setclock = function(date, callback) {
+                (function(mac, date, callback, pw){
+
+                    var year = addZeros((date.getYear() + 1900 - 2000).toString(16), 2);
+                    var month = addZeros((date.getMonth() + 1).toString(16), 2);
+                    var fullMinutes = addZeros((date.getDate() * 24 * 60 + date.getHours() * 60 + date.getMinutes()).toString(16), 4);
+
+                    var hours = addZeros((date.getHours()).toString(16), 2);
+                    var minutes = addZeros((date.getMinutes()).toString(16), 2);
+                    var seconds = addZeros((date.getSeconds()).toString(16), 2);
+                    var day = addZeros((date.getDay()).toString(16), 2);
+
+                    var tempLog = "FFFFFFFF";
+                    var dateHex = year + month + fullMinutes + tempLog + hours + minutes + seconds + day;
+
+                    dateHex = dateHex.toUpperCase();
+
+                    //console.log(dateHex, parseInt(fullMinutes, 16));
+
+                    //console.log(year, month,fullMinutes, hours, minutes, seconds, day);
+
+                    commandQueue.push({f: function() {
+                        sendCommand(protocolCommands.setclock, mac, dateHex, callback, pw); 
+                    }, scope: pw});
+
+                })(mac, date, callback, self);
+                sendQueue();
+                return self;
+            }
+
             self.info = function(callback) {
                 (function(mac, callback, pw){
                     commandQueue.push({f: function() {
@@ -404,6 +435,115 @@ function plugwise(options) {
                 return self;
             }
 
+            self._powerInfoBufferBase = function(logAddress, callback) {
+
+                /*
+                   if (typeof offset == "function") {
+                   callback = offset;
+                   offset = 0;
+                   }
+                   */
+
+                (function(mac, callback, logAddress, pw){
+                    commandQueue.push({f: function() {
+                        sendCommand(protocolCommands.powerbufferinfo, mac, logAddress, callback, pw); 
+                    }, scope: pw});
+                })(mac, callback, logAddress, self);
+                sendQueue();
+
+                return self;
+
+            };
+
+            self.powerbufferinfo = self.powerBufferInfo = function(callback) {
+
+                self.powerinfo(function(deviceInfo) {
+
+                    var logAddress = (parseInt(self.data.logAddressHex, 16) + 278528 ) * 32;
+                    var logAddressHex = logAddress.toString(16).toUpperCase();
+                    logAddressHex = addZeros(logAddressHex, 8);
+
+                    var buffer = [];
+
+                    var counter = 0;
+
+                    function getNext(logAddress) {
+
+
+
+                        var logAddressHex = logAddress.toString(16).toUpperCase();
+
+                        //console.log("%s. %s", counter, logAddressHex);
+
+                        self._powerInfoBufferBase(logAddressHex, function(powerInfo) {
+
+                            //console.log(powerInfo);
+
+                            for(var i = 0, ii = powerInfo.length; i < ii; i++){
+
+                                if (powerInfo[i].date.getTime() < (new Date()).getTime()) {
+                                    buffer.push(powerInfo[i]);
+                                }
+
+                            }
+
+                            var lastEntry = powerInfo[powerInfo.length - 1];
+
+                            if (lastEntry && lastEntry.date.getTime < (new Date()).getTime()) {
+
+                                getNext(logAddress + 8);
+
+                            } else {
+                                callback(buffer);
+                            }
+
+                        });
+
+                    }
+
+                    getNext(logAddress);
+
+                    /*
+                    self._powerInfoBufferBase(logAddressHex, function(powerInfo) {
+
+                        //console.log(powerInfo);
+
+
+                        var firstDate = powerInfo.length > 0 ? powerInfo[0].date : new Date();
+                        var dateToCheck = new Date();
+
+                        console.log(firstDate);
+                        console.log(dateToCheck);
+
+
+                        var hoursDelta = Math.floor(( dateToCheck.getTime() - firstDate.getTime() ) / (1000 * 60 * 60));
+
+                        console.log(hoursDelta);
+
+                        //var offset = Math.ceil(hoursDelta / 4) - 7;
+
+                        var logAddress = (parseInt(self.data.logAddressHex, 16) + 278528 ) * 32 + 8 * hoursDelta;
+                        var logAddressHex = logAddress.toString(16).toUpperCase();
+                        logAddressHex = addZeros(logAddressHex, 8);
+
+                        console.log(logAddressHex);
+
+
+                        self._powerInfoBufferBase(logAddressHex, function(info) {
+                            callback(info);
+                            process.exit();
+
+                        });
+
+                    });
+
+                    */
+                });
+
+                return self;
+
+            };
+
             self.calibration = function(callback) {
                 (function(mac, callback, pw){
                     commandQueue.push({f: function() {
@@ -433,6 +573,13 @@ function plugwise(options) {
 
     return plugwiseObject;
 
+}
+
+function addZeros(value, length) {
+    for(var i = value.length + 1, ii = length; i <= ii; i++){
+        value = "0" + value;
+    }
+    return value;
 }
 
 var hasBeenInitiated = false;
