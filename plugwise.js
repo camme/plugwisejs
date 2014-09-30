@@ -407,7 +407,7 @@ function plugwise(options) {
             self.powerinfo = function(callback) {
 
                 // if we want to read the power from an appliance, we have to know if its on or off
-                if (self.data.relay) {
+                //if (true || self.data.relay) {
                     (function(mac, callback, pw){
                         // if we havent asked for calibarion data, lets do it now
                         if (!pw.data.calibration) {
@@ -418,7 +418,7 @@ function plugwise(options) {
                         }, scope: pw});
                     })(mac, callback, self);
                     sendQueue();
-                }
+                /*}
                 else {
                     // check if we dont know if the relay is on or off
                     if (self.data.relay !== false) {
@@ -432,6 +432,7 @@ function plugwise(options) {
                         callback.call(self, {error: true, message: 'relay off'});
                     }
                 }
+                */
                 return self;
             }
 
@@ -455,23 +456,70 @@ function plugwise(options) {
 
             };
 
-            self.powerbufferinfo = self.powerBufferInfo = function(callback) {
+            self.powerbufferinfo = self.powerBufferInfo = function(when, callback) {
 
                 self.powerinfo(function(deviceInfo) {
 
-                    var logAddress = (parseInt(self.data.logAddressHex, 16) + 278528 ) * 32;
-                    var logAddressHex = logAddress.toString(16).toUpperCase();
-                    logAddressHex = addZeros(logAddressHex, 8);
+                    var startDate = new Date(1974, 0, 1);
+                    var endDate = new Date();
+
+                    var amount = 4;
+
+                    if (typeof when == "function") {
+
+                        callback = when;
+                        delete when;
+
+                        // The default value is today
+                        var now = new Date();
+                        var nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        when = nowDay;
+
+                    }
+
+                    if (typeof when == "number") {
+
+                        // This is when we just get how many hours back in time we want 
+                        amount = when;
+
+                    } else if (when.constructor == Array && when.length == 2 && when[0].constructor == Date && when[1].constructor == Date && when[0].getTime() <= when[1].getTime()) {
+
+                        // This is when we get an interval of dates as an array
+                        // it should be an array of two date when the first is older than the second
+                        startDate = when[0];
+                        var now = new Date();
+                        var nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        var delta = nowDay.getTime() - when[0].getTime();
+                        var hours = Math.ceil(delta / (1000 * 60 * 60)) + 24;
+                        endDate = new Date(when[1].getTime() + 1000 * 60 * 60 * 24 - 1);
+                        //console.log("%s  -  %s  -  %s  -  %sh", nowDay, startDate, endDate, hours);
+                        amount = hours;
+ 
+                    } else if (when.constructor == Date) {
+                       
+                        // This is when we a single date
+                        
+                        // Get a start date and end date and calculate how much back in time we need to go to get those dates
+                        startDate = when;
+                        var now = new Date();
+                        var nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        var delta = nowDay.getTime() - when.getTime();
+                        var hours = Math.ceil(delta / (1000 * 60 * 60)) + 24;
+                        endDate = new Date(startDate.getTime() + 1000 * 60 * 60 * 24 - 1);
+                        //console.log("%s  -  %s  -  %s  -  %sh", nowDay, startDate, endDate, hours);
+                        amount = hours;
+                       
+                    }
+
+                    var logAddress = parseInt(self.data.logAddressHex, 16) - 8 * amount;
 
                     var buffer = [];
-
                     var counter = 0;
 
                     function getNext(logAddress) {
 
-
-
                         var logAddressHex = logAddress.toString(16).toUpperCase();
+                        logAddressHex = addZeros(logAddressHex, 8);
 
                         //console.log("%s. %s", counter, logAddressHex);
 
@@ -480,18 +528,15 @@ function plugwise(options) {
                             //console.log(powerInfo);
 
                             for(var i = 0, ii = powerInfo.length; i < ii; i++){
-
-                                if (powerInfo[i].date.getTime() < (new Date()).getTime()) {
+                                if (powerInfo[i].date.getTime() >= startDate.getTime() && powerInfo[i].date.getTime() <= endDate.getTime()) {
                                     buffer.push(powerInfo[i]);
                                 }
-
                             }
 
                             var lastEntry = powerInfo[powerInfo.length - 1];
 
-                            if (lastEntry && lastEntry.date.getTime < (new Date()).getTime()) {
-
-                                getNext(logAddress + 8);
+                            if (lastEntry && lastEntry.date.getTime() <= endDate.getTime()){
+                                getNext(logAddress + 8 * 4);
 
                             } else {
                                 callback(buffer);
