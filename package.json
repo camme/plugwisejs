@@ -1,6 +1,6 @@
 {
   "name": "plugwisejs",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Plugwise API for nodejs",
   "author": "Camilo Tapia <camilo.tapia@gmail.com>",
   "contributors": [],
@@ -16,7 +16,7 @@
     "url": "git://github.com/camme/plugwisejs.git"
   },
   "dependencies": {
-    "serialport": "~1.1.0",
+    "serialport": "4.0.5",
     "moment": "^2.8.1",
     "crc": "0.2.0"
   }
